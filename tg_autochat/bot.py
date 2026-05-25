@@ -152,9 +152,12 @@ class AutoChatBot:
         if not connection_id or not chat_id or not message_id:
             return
 
-        connection = self.store.get_connection(connection_id)
+        connection = self._resolve_business_connection(connection_id)
         if not self._can_reply(connection):
-            logging.info("Skip message: connection is missing or has no can_reply right.")
+            logging.info(
+                "Skip message: connection is missing/disabled or has no can_reply right. connection_id=%s",
+                connection_id,
+            )
             return
 
         owner_id = (connection.get("user") or {}).get("id") if connection else None
@@ -313,6 +316,33 @@ class AutoChatBot:
             self.tg.send_message(chat_id=self.settings.admin_id, text=text, disable_notification=True)
         except TelegramAPIError as exc:
             logging.info("Admin notification skipped: %s", exc.description)
+
+    def _resolve_business_connection(self, connection_id: str) -> dict[str, Any] | None:
+        connection = self.store.get_connection(connection_id)
+        if self._can_reply(connection):
+            return connection
+
+        try:
+            fetched = self.tg.get_business_connection(connection_id)
+        except TelegramAPIError as exc:
+            logging.info(
+                "Could not refresh business connection %s: %s",
+                connection_id,
+                exc.description,
+            )
+            return connection
+
+        self.store.upsert_connection(fetched)
+        can_reply = self._right_enabled(fetched, "can_reply", legacy_key="can_reply")
+        can_read = self._right_enabled(fetched, "can_read_messages")
+        logging.info(
+            "Refreshed business connection %s enabled=%s can_reply=%s can_read_messages=%s",
+            connection_id,
+            fetched.get("is_enabled"),
+            can_reply,
+            can_read,
+        )
+        return fetched
 
     def _set_commands(self) -> None:
         try:

@@ -58,6 +58,12 @@ class TelegramClient:
     def get_me(self) -> dict[str, Any]:
         return self.call("getMe")
 
+    def get_business_connection(self, business_connection_id: str) -> dict[str, Any]:
+        return self.call(
+            "getBusinessConnection",
+            {"business_connection_id": business_connection_id},
+        )
+
     def delete_webhook(self, drop_pending_updates: bool = False) -> bool:
         return bool(self.call("deleteWebhook", {"drop_pending_updates": drop_pending_updates}))
 
